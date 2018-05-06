@@ -1,0 +1,5 @@
+# Ignore OS Items
+.DS_Store
+
+# Ignore Build artifacts
+/build/*
