@@ -75,9 +75,7 @@ func createPrefixedName(attr *xml.Attr, node *AbstractNode) (name string) {
 			name = ns.Local + ":" + name
 			return
 		}
-		print("Not found here\n")
 	}
-	print("WUT\n")
 
 	// @TODO properly handle this later
 	panic("Attribute malformed namespace reference!")
