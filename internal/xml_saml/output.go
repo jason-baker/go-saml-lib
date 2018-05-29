@@ -27,6 +27,9 @@ func (node *AbstractNode) iprint(indent string) {
 	case xml.Comment:
 		print(fmt.Sprintf("%svalue (%p): %T %+v\n", indent, val, val, val))
 	case *WrappedElement:
+		if len(node.nsLookup) > 0 {
+			print(fmt.Sprintf("%snsLookup (%p): %T %+v\n", indent, node.nsLookup, node.nsLookup, node.nsLookup))
+		}
 		val.iprint(indent)
 		endElm = &val.end
 	default:
@@ -45,10 +48,10 @@ func (node *AbstractNode) debugPrint() {
 	node.iprint("")
 }
 
-func attrib_string_array(attribs []xml.Attr) []string {
+func attribStringArray(attribs []xml.Attr, node *AbstractNode) []string {
 	strs := make([]string, len(attribs))
-	for i, v := range attribs {
-		strs[i] = fmt.Sprintf("%s=\"%s\"", v.Name, v.Value)
+	for i, attrib := range attribs {
+		strs[i] = fmt.Sprintf("%v=\"%v\"", createPrefixedName(&attrib, node), attrib.Value)
 	}
 	return strs
 }
@@ -72,21 +75,16 @@ func (node *AbstractNode) Print(writer io.Writer) {
 		out = fmt.Sprintf("%s", val)
 	case xml.Directive:
 		out = fmt.Sprintf("<!%s>", val)
-		print(fmt.Sprintf("Test Data: `%s`", out))
+		print(fmt.Sprintf("Unexpected Test Data: `%s`", out))
 	case *WrappedElement:
-		name := val.start.Name.Local
-		end = val.end.Name.Local
-		if len(val.start.Name.Space) > 0 {
-			name = fmt.Sprintf("%s:%s", val.start.Name.Space, name)
-			end = fmt.Sprintf("%s:%s", val.end.Name.Space, end)
-		}
+		tag := val.createPrefixedName(node)
 		if len(val.start.Attr) > 0 {
-			out = fmt.Sprintf("<%s %s>", name,
-				strings.Join(attrib_string_array(val.start.Attr), " "))
+			out = fmt.Sprintf("<%s %s>", tag,
+				strings.Join(attribStringArray(val.start.Attr, node), " "))
 		} else {
-			out = fmt.Sprintf("<%s>", name)
+			out = fmt.Sprintf("<%s>", tag)
 		}
-		end = fmt.Sprintf("</%s>", end)
+		end = fmt.Sprintf("</%s>", tag)
 	default:
 		panic("Unexpected XML type!")
 	}

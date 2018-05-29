@@ -18,6 +18,7 @@ func Test_Canonicalization(t *testing.T) {
 	testDatas := []TestData{
 		TestData{name: "c14n_001", canonType: XML_C14N},
 		TestData{name: "c14n_002", canonType: XML_C14N},
+		TestData{name: "c14n_003", canonType: XML_C14N},
 	}
 
 	for _, testData := range testDatas {

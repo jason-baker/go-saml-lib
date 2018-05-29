@@ -15,21 +15,35 @@ type WrappedElement struct {
 
 type AbstractNode struct {
 	value    interface{}
+	nsLookup map[string]*xml.Name
+	parent   *AbstractNode
 	children []*AbstractNode
 }
 
-func (node *AbstractNode) addWrappedElement(child *WrappedElement) *AbstractNode {
+func (node *AbstractNode) addWrappedElement(value *WrappedElement) *AbstractNode {
 	newNode := AbstractNode{
-		value:    child,
+		value:    value,
+		nsLookup: nil,
+		parent:   node,
 		children: nil,
+	}
+	for _, attr := range value.start.Attr {
+		if isAttributeNamespace(&attr) {
+			if len(newNode.nsLookup) == 0 {
+				newNode.nsLookup = make(map[string]*xml.Name)
+			}
+			newNode.nsLookup[attr.Value] = &attr.Name
+		}
 	}
 	node.children = append(node.children, &newNode)
 	return &newNode
 }
 
-func (node *AbstractNode) addTokenNode(child xml.Token) *AbstractNode {
+func (node *AbstractNode) addTokenNode(value xml.Token) *AbstractNode {
 	newNode := AbstractNode{
-		value:    xml.CopyToken(child),
+		value:    xml.CopyToken(value),
+		nsLookup: nil,
+		parent:   node,
 		children: nil,
 	}
 	node.children = append(node.children, &newNode)
@@ -74,6 +88,8 @@ func Parse(doc io.Reader) (*AbstractNode, error) {
 
 	root := AbstractNode{
 		value:    nil,
+		nsLookup: nil,
+		parent:   nil,
 		children: nil,
 	}
 	elmStack := make([]*AbstractNode, 1)

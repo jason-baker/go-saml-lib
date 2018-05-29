@@ -3,7 +3,7 @@ package xml_saml
 import (
 	"encoding/xml"
 	"errors"
-	"fmt"
+	"sort"
 )
 
 type CanonicalizationType string
@@ -24,46 +24,53 @@ type filterOpts struct {
 	filteredProcInst []string
 }
 
+// Attribute sorting interface
+type AttrSort []xml.Attr
+
+func (a AttrSort) Len() int      { return len(a) }
+func (a AttrSort) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a AttrSort) Less(i, j int) bool {
+	return -1 == compareElementAttributes(&a[i], &a[j])
+}
+
 // c14nNode returns the canonicalized node; if the node is to be removed it returns nil.
-func (node *AbstractNode) c14nNode(opts *filterOpts) (newNode *AbstractNode) {
+func (node *AbstractNode) c14nNode(newParent *AbstractNode, opts *filterOpts) (newNode *AbstractNode) {
+	newNode = nil
 	switch val := (node.value).(type) {
 	case xml.ProcInst:
 		for _, filter := range opts.filteredProcInst {
 			if val.Target == filter {
-				//print(fmt.Sprintf("dropping procInst (%p): %T %+v\n", &val, val, val))
-				return nil
+				return
 			}
 		}
-		return &AbstractNode{value: xml.CopyToken(val), children: nil}
+		// @TODO Handle instructions somewhere?
+		newNode = node.CopyAbstractNode(newParent)
 	case xml.CharData:
-		newCharData := xml.CopyToken(val)
 		if opts.isDocRoot {
 			// @TODO Normalize whitespace/check for all whitespace instead of arbitrary nuke
-			return nil
+			return
 		}
-		return &AbstractNode{value: newCharData, children: nil}
+		newNode = node.CopyAbstractNode(newParent)
 	case xml.Directive:
 		// @TODO Handle directives
-		//print(fmt.Sprintf("dropping directive (%p): %T %+v\n", val, val, val))
 	case xml.Comment:
 		if opts.keepComments {
-			return &AbstractNode{value: xml.CopyToken(val), children: nil}
+			newNode = node.CopyAbstractNode(newParent)
 		}
-		//print(fmt.Sprintf("dropping comment (%p): %T %+v\n", val, val, val))
 	case *WrappedElement:
-		return &AbstractNode{
-			value: &WrappedElement{
-				start: val.start.Copy(),
-				end:   val.end,
-			},
-			children: nil,
+		newNode = node.CopyAbstractNode(newParent)
+		newElm, _ := newNode.value.(*WrappedElement)
+
+		// Clean up the elements and sort them
+		for _, attrib := range newElm.start.Attr {
+			trimAttributeWhiteSpace(&attrib)
 		}
+		sort.Sort(AttrSort(newElm.start.Attr))
 	default:
-		print(fmt.Sprintf("value (%p): %T %+v\n", val, val, val))
-		panic("womp")
+		panic("Unexpected value inside AbstractNode")
 	}
 
-	return nil
+	return
 }
 
 func (oldNode *AbstractNode) xml_c14n(newParent *AbstractNode, opts *filterOpts) error {
@@ -78,7 +85,7 @@ func (oldNode *AbstractNode) xml_c14n(newParent *AbstractNode, opts *filterOpts)
 	}
 
 	for _, oldChild := range oldNode.children {
-		newChild := oldChild.c14nNode(activeOpts)
+		newChild := oldChild.c14nNode(newParent, activeOpts)
 		if newChild != nil {
 			newParent.children = append(newParent.children, newChild)
 			if len(oldChild.children) > 0 {
@@ -99,6 +106,8 @@ func (oldNode *AbstractNode) xml_c14n(newParent *AbstractNode, opts *filterOpts)
 			if i < len(newParent.children)-1 {
 				expanded[i*2+1] = &AbstractNode{
 					value:    xml.CharData([]byte{'\x0a'}),
+					nsLookup: nil,
+					parent:   nil,
 					children: nil,
 				}
 			}
@@ -112,6 +121,8 @@ func (oldNode *AbstractNode) xml_c14n(newParent *AbstractNode, opts *filterOpts)
 func (root *AbstractNode) Canonicalize(c14nType CanonicalizationType) (*AbstractNode, error) {
 	newRoot := AbstractNode{
 		value:    nil,
+		nsLookup: nil,
+		parent:   nil,
 		children: nil,
 	}
 	switch c14nType {
